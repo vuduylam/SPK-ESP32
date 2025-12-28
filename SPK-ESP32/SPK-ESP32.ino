@@ -78,6 +78,10 @@ String phoneNumber = "";
 bool antiTheftEnabled = false;
 unsigned long ms = 0;
 
+float latitude, longitude, accuracy;
+int year, month, day;
+int hour, minute, second;
+
 //===============================================
 void setup() {
   //UART settings
@@ -134,6 +138,8 @@ void loop() {
     Serial.println("=============== End get data =================");
     Serial.println();
   }
+
+  getLbs();
 }
 
 template <typename T>
@@ -342,5 +348,20 @@ void callPhoneNumber() {
   }
   else{
     SERIAL_MONITOR.println("Failed");
+  }
+}
+
+void getLbs()
+{
+  if (modem.getGsmLocation(&latitude, &longitude, &accuracy, &year, &month, &day, &hour, &minute, &second)) 
+  {
+    SERIAL_MONITOR.println("LBS OK:");
+    SERIAL_MONITOR.print("Latitude: "); SERIAL_MONITOR.println(latitude, 8);
+    SERIAL_MONITOR.print("Longitude: "); SERIAL_MONITOR.println(longitude, 8);
+    SERIAL_MONITOR.print("Accuracy: "); SERIAL_MONITOR.println(accuracy);
+    SERIAL_MONITOR.println("Year: " + String(year) + "\tMonth: " + String(month) + "\tDay: " + String(day));
+    SERIAL_MONITOR.println("Hour: " + String(hour) + "\tMinute: " + String(minute) + "\tSecond: " + String(second));
+  } else {
+    SERIAL_MONITOR.println("Couldn't get GSM location");
   }
 }
