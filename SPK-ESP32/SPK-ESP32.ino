@@ -83,6 +83,7 @@ AsyncResult streamResult;
 
 //================Global Variable================
 String phoneNumber = "";
+bool antiTheftEnabled = false;
 unsigned long ms = 0;
 
 //===============================================
@@ -134,8 +135,12 @@ void loop() {
     writer.join(json, 2, obj1, obj2);
 
     Database.set<object_t>(aClient, "/examples/Stream/data", json, processData, "setTask");
-    Serial.println("========= Data ==========");
+    
+    Serial.println();
+    Serial.println("=========== Get data from Firebase ===========");
     getFirebaseData();
+    Serial.println("=============== End get data =================");
+    Serial.println();
   }
 }
 
@@ -153,7 +158,16 @@ void check_and_print_value(T value) {
 
 void getFirebaseData() {
     phoneNumber = Database.get<String>(aClient, "/examples/test");
+    SERIAL_MONITOR.print("Get phone number stastus: ");
     check_and_print_value(phoneNumber);
+    antiTheftEnabled = Database.get<bool>(aClient, "/examples/antiTheftEnabled");
+    SERIAL_MONITOR.print("Get antiTheftEnabled flag stastus: ");
+    if (antiTheftEnabled){
+      SERIAL_MONITOR.println("On");
+    }
+    else {
+      SERIAL_MONITOR.println("Off");
+    }
 }
 
 void getGps(float& latitude, float& longitude) {
