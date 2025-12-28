@@ -22,6 +22,7 @@
 #define DATABASE_URL "https://test-a2978-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
 //================ ================
+void getFirebaseData()
 void getGps(float& latitude, float& longitude);
 float getDistance(float latitude1, float longtitude1, float latitude2, float longtitude2);
 void processData(AsyncResult &aResult);
@@ -59,6 +60,23 @@ void setup() {
 
 void loop() {
 
+}
+
+template <typename T>
+void check_and_print_value(T value) {
+    // To make sure that we actually get the result or error.
+    if (aClient.lastError().code() == 0)
+    {
+        Serial.print("Success, Value: ");
+        Serial.println(value);
+    }
+    else
+        Firebase.printf("Error, msg: %s, code: %d\n", aClient.lastError().message().c_str(), aClient.lastError().code());
+}
+
+void getFirebaseData() {
+    stringValue = Database.get<String>(aClient, "/examples/test");
+    check_and_print_value(stringValue);
 }
 
 void getGps(float& latitude, float& longitude) {
