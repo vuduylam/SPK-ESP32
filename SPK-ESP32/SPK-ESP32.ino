@@ -44,27 +44,19 @@ const char gprsPass[] = "";
 #define DATABASE_URL "https://test-a2978-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
 //================Function declaration================
-void getFirebaseData();
+//GPS
 void getGps(float& latitude, float& longitude);
 float getDistance(float latitude1, float longtitude1, float latitude2, float longtitude2);
+
+//Firebase
+void getFirebaseData();
 void processData(AsyncResult &aResult);
+void auth_debug_print(AsyncResult &aResult);
 void initModem();
-void auth_debug_print(AsyncResult &aResult) {
-    if (aResult.isEvent())
-    {
-        Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.eventLog().message().c_str(), aResult.eventLog().code());
-    }
 
-    if (aResult.isDebug())
-    {
-        Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
-    }
-
-    if (aResult.isError())
-    {
-        Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
-    }
-}
+//GSM
+void sendSms(const char* message);
+void callPhoneNumber();
 
 //================ ================
 TinyGPSPlus gps;
@@ -141,6 +133,7 @@ void loop() {
     getFirebaseData();
     Serial.println("=============== End get data =================");
     Serial.println();
+    sendSms("hello from esp32");
   }
 }
 
@@ -276,6 +269,24 @@ void initModem() {
   if (modem.isNetworkConnected())
       SERIAL_MONITOR.println("Network connected");
 }
+
+void auth_debug_print(AsyncResult &aResult) {
+    if (aResult.isEvent())
+    {
+        Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.eventLog().message().c_str(), aResult.eventLog().code());
+    }
+
+    if (aResult.isDebug())
+    {
+        Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
+    }
+
+    if (aResult.isError())
+    {
+        Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
+    }
+}
+
 void processData(AsyncResult &aResult) {
   // Exits when no result is available when calling from the loop.
   if (!aResult.isResult())
@@ -316,4 +327,10 @@ void processData(AsyncResult &aResult) {
     }
     Firebase.printf("Free Heap: %d\n", ESP.getFreeHeap());
   }
+}
+
+void sendSms(const char* message) {
+  bool resSMS = modem.sendSMS(phoneNumber.c_str(), message);
+  SERIAL_MONITOR.print("SMS: ");
+  SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
 }
