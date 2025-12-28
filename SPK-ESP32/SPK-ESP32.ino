@@ -45,7 +45,8 @@ const char gprsPass[] = "";
 
 //================Function declaration================
 //GPS
-void getGps(float& latitude, float& longitude);
+void getGps(float& latitude, float& longitude, float& accuracy, int& year, int& month, int& day, int& hour, int& minute, int& second); 
+//void getGps(float& latitude, float& longitude);
 float getDistance(float latitude1, float longtitude1, float latitude2, float longtitude2);
 
 //Firebase
@@ -119,6 +120,8 @@ void loop() {
   // To maintain the authentication and async tasks
   app.loop();
 
+  getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
+
   if (millis() - ms > 20000 && app.ready()) {
     ms = millis();
 
@@ -168,7 +171,10 @@ void getFirebaseData() {
     }
 }
 
-void getGps(float& latitude, float& longitude) {
+void getGps(float& latitude, float& longitude, float& accuracy,
+            int& year, int& month, int& day,
+            int& hour, int& minute, int& second
+            ) {
   boolean newData = false;
   for (unsigned long start = millis(); millis() - start < 1000;){
     while (SERIAL_GPS.available()){
@@ -183,12 +189,54 @@ void getGps(float& latitude, float& longitude) {
   if (newData) {
     latitude = gps.location.lat();
     longitude = gps.location.lng();
+    accuracy = gps.hdop.isValid() ? gps.hdop.hdop() : -1;
+    
+    if (gps.date.isValid()) {
+            year  = gps.date.year();
+            month = gps.date.month();
+            day   = gps.date.day();
+        }
+
+    if (gps.time.isValid()) {
+        hour   = gps.time.hour();
+        minute = gps.time.minute();
+        second = gps.time.second();
+    }
     newData = false;
   }
   else {
     Serial.println("No GPS data is available");
   }
+
+  SERIAL_MONITOR.println("LBS OK:");
+  SERIAL_MONITOR.print("Latitude: "); SERIAL_MONITOR.println(latitude, 8);
+  SERIAL_MONITOR.print("Longitude: "); SERIAL_MONITOR.println(longitude, 8);
+  SERIAL_MONITOR.print("Accuracy: "); SERIAL_MONITOR.println(accuracy);
+  SERIAL_MONITOR.println("Year: " + String(year) + "\tMonth: " + String(month) + "\tDay: " + String(day));
+  SERIAL_MONITOR.println("Hour: " + String(hour) + "\tMinute: " + String(minute) + "\tSecond: " + String(second));
 }
+
+// void getGps(float& latitude, float& longitude) {
+//   boolean newData = false;
+//   for (unsigned long start = millis(); millis() - start < 1000;){
+//     while (SERIAL_GPS.available()){
+//       if (gps.encode(SERIAL_GPS.read()))
+//         if (gps.location.isValid()){
+//           newData = true;
+//           break;
+//         }
+//     }
+//   }
+  
+//   if (newData) {
+//     latitude = gps.location.lat();
+//     longitude = gps.location.lng();
+//     newData = false;
+//   }
+//   else {
+//     Serial.println("No GPS data is available");
+//   }
+// }
 
 float getDistance(float latitude1, float longtitude1, float latitude2, float longtitude2) {
   // Variables
