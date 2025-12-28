@@ -133,7 +133,6 @@ void loop() {
     getFirebaseData();
     Serial.println("=============== End get data =================");
     Serial.println();
-    sendSms("hello from esp32");
   }
 }
 
@@ -333,4 +332,15 @@ void sendSms(const char* message) {
   bool resSMS = modem.sendSMS(phoneNumber.c_str(), message);
   SERIAL_MONITOR.print("SMS: ");
   SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
+}
+
+void callPhoneNumber() {
+  bool resCall = modem.callNumber(phoneNumber.c_str());
+  SERIAL_MONITOR.print("Call:");
+  if(resCall){
+    SERIAL_MONITOR.println("Ok");
+  }
+  else{
+    SERIAL_MONITOR.println("Failed");
+  }
 }
