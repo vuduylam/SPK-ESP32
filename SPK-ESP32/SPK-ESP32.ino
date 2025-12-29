@@ -46,8 +46,7 @@ const char gprsPass[] = "";
 //================Function declaration================
 //GPS
 void getGps(float& latitude, float& longitude, float& accuracy, int& year, int& month, int& day, int& hour, int& minute, int& second); 
-//void getGps(float& latitude, float& longitude);
-float getDistance(float latitude1, float longtitude1, float latitude2, float longtitude2);
+float getDistance(float latitude1, float longitude1, float latitude2, float longitude2);
 
 //Firebase
 void getFirebaseData();
@@ -75,13 +74,16 @@ RealtimeDatabase Database;
 AsyncResult streamResult;
 
 //================Global Variable================
+String deviceId = "02:AF:35:8C:12:D4";
 String phoneNumber = "";
 bool antiTheftEnabled = false;
+bool crashDetected = false;
 unsigned long ms = 0;
 
 float latitude, longitude, accuracy;
 int year, month, day;
 int hour, minute, second;
+String timestamp = "";
 
 //===============================================
 void setup() {
@@ -113,36 +115,46 @@ void setup() {
 
   streamClient.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
 
-  Database.get(streamClient, "/examples/Stream/data", processData, true, "streamTask");
+  Database.get(streamClient, "/Data", processData, true, "streamTask");
+  //Database.get(streamClient, "/examples/Stream/data", processData, true, "streamTask");
 }
 
 void loop() {
   // To maintain the authentication and async tasks
   app.loop();
-
-  getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
-
-  if (millis() - ms > 20000 && app.ready()) {
+  if(millis() - ms > 20000) {
     ms = millis();
+    SERIAL_MONITOR.println();
+    SERIAL_MONITOR.println("=================================================================================");
 
-    JsonWriter writer;
+    getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
 
-    object_t json, obj1, obj2;
+    if (app.ready()) {
+      SERIAL_MONITOR.println("----------- Get data from Firebase -----------");
+      getFirebaseData();
+      JsonWriter writer;
+      object_t json, locObj, crashObj, idObj, phoneObj, timeObj;
 
-    writer.create(obj1, "ms", ms);
-    writer.create(obj2, "rand", random(10000, 30000));
-    writer.join(json, 2, obj1, obj2);
+      object_t lat, lon;
+      writer.create(lat, "latitude", String(latitude, 8));
+      writer.create(lon, "longitude", String(longitude, 8));
+      writer.join(locObj, 2, lat, lon);
 
-    Database.set<object_t>(aClient, "/examples/Stream/data", json, processData, "setTask");
-    
-    Serial.println();
-    Serial.println("=========== Get data from Firebase ===========");
-    getFirebaseData();
-    Serial.println("=============== End get data =================");
-    Serial.println();
+      writer.create(crashObj, "crashDetected", crashDetected);
+      writer.create(idObj, "deviceId", deviceId);
+      writer.create(phoneObj, "phoneNumber", phoneNumber);
+      writer.create(timeObj, "timestamp", timestamp);
+
+      object_t locWrapper;
+      writer.create(locWrapper, "location", locObj);
+
+      writer.join(json, 5, crashObj, idObj, locWrapper, phoneObj, timeObj);
+
+      Database.set<object_t>(aClient, "/Data", json, processData, "setTask");
+    }
+
+    SERIAL_MONITOR.println("=================================================================================");
   }
-
-  getLbs();
 }
 
 template <typename T>
@@ -159,10 +171,10 @@ void check_and_print_value(T value) {
 
 void getFirebaseData() {
     phoneNumber = Database.get<String>(aClient, "/examples/test");
-    SERIAL_MONITOR.print("Get phone number stastus: ");
+    SERIAL_MONITOR.print("Get phone number status: ");
     check_and_print_value(phoneNumber);
     antiTheftEnabled = Database.get<bool>(aClient, "/examples/antiTheftEnabled");
-    SERIAL_MONITOR.print("Get antiTheftEnabled flag stastus: ");
+    SERIAL_MONITOR.print("Get antiTheftEnabled flag status: ");
     if (antiTheftEnabled){
       SERIAL_MONITOR.println("On");
     }
@@ -173,9 +185,9 @@ void getFirebaseData() {
 
 void getGps(float& latitude, float& longitude, float& accuracy,
             int& year, int& month, int& day,
-            int& hour, int& minute, int& second
-            ) {
+            int& hour, int& minute, int& second) {
   boolean newData = false;
+
   for (unsigned long start = millis(); millis() - start < 1000;){
     while (SERIAL_GPS.available()){
       if (gps.encode(SERIAL_GPS.read()))
@@ -185,77 +197,65 @@ void getGps(float& latitude, float& longitude, float& accuracy,
         }
     }
   }
-  
+
+  SERIAL_MONITOR.println();
+  SERIAL_MONITOR.println("------------------- GPS Data -------------------");
+
   if (newData) {
     latitude = gps.location.lat();
     longitude = gps.location.lng();
     accuracy = gps.hdop.isValid() ? gps.hdop.hdop() : -1;
     
     if (gps.date.isValid()) {
-            year  = gps.date.year();
-            month = gps.date.month();
-            day   = gps.date.day();
-        }
+      year  = gps.date.year();
+      month = gps.date.month();
+      day   = gps.date.day();
+    }
 
     if (gps.time.isValid()) {
-        hour   = gps.time.hour();
-        minute = gps.time.minute();
-        second = gps.time.second();
+      hour   = gps.time.hour();
+      minute = gps.time.minute();
+      second = gps.time.second();
     }
+
+    timestamp = String(year) + "-" + String(month) + "-" + String(day) + " " +
+                String(hour) + ":" + String(minute) + ":" + String(second);
+
+    SERIAL_MONITOR.println("GPS OK:");
+    SERIAL_MONITOR.print("latitude: "); SERIAL_MONITOR.print(latitude, 8);
+    SERIAL_MONITOR.print("\tlongitude: "); SERIAL_MONITOR.println(longitude, 8);
+    // SERIAL_MONITOR.print("Latitude: "); SERIAL_MONITOR.println(latitude, 8);
+    // SERIAL_MONITOR.print("Longitude: "); SERIAL_MONITOR.println(longitude, 8);
+    SERIAL_MONITOR.print("accuracy: "); SERIAL_MONITOR.println(accuracy);
+
+    SERIAL_MONITOR.print("timestamp: "); SERIAL_MONITOR.println(timestamp);
+     
     newData = false;
   }
   else {
-    Serial.println("No GPS data is available");
-  }
-
-  SERIAL_MONITOR.println("LBS OK:");
-  SERIAL_MONITOR.print("Latitude: "); SERIAL_MONITOR.println(latitude, 8);
-  SERIAL_MONITOR.print("Longitude: "); SERIAL_MONITOR.println(longitude, 8);
-  SERIAL_MONITOR.print("Accuracy: "); SERIAL_MONITOR.println(accuracy);
-  SERIAL_MONITOR.println("Year: " + String(year) + "\tMonth: " + String(month) + "\tDay: " + String(day));
-  SERIAL_MONITOR.println("Hour: " + String(hour) + "\tMinute: " + String(minute) + "\tSecond: " + String(second));
+    SERIAL_MONITOR.println("No GPS data is available. Trying to get LBS...");
+    getLbs();
+  } 
 }
 
-// void getGps(float& latitude, float& longitude) {
-//   boolean newData = false;
-//   for (unsigned long start = millis(); millis() - start < 1000;){
-//     while (SERIAL_GPS.available()){
-//       if (gps.encode(SERIAL_GPS.read()))
-//         if (gps.location.isValid()){
-//           newData = true;
-//           break;
-//         }
-//     }
-//   }
-  
-//   if (newData) {
-//     latitude = gps.location.lat();
-//     longitude = gps.location.lng();
-//     newData = false;
-//   }
-//   else {
-//     Serial.println("No GPS data is available");
-//   }
-// }
-
-float getDistance(float latitude1, float longtitude1, float latitude2, float longtitude2) {
+float getDistance(float latitude1, float longitude1, float latitude2, float longitude2) {
   // Variables
   float distCalc=0;
   float distCalc2=0;
   float difLatiude=0;
-  float difLongtitude=0;
+  float diflongitude=0;
 
   // Calculations
   difLatiude  = radians(latitude2-latitude1);
   latitude1 = radians(latitude1);
   latitude2 = radians(latitude2);
-  difLongtitude = radians((longtitude2)-(longtitude1));
+  diflongitude = radians((longitude2)-(longitude1));
 
   distCalc = (sin(difLatiude/2.0)*sin(difLatiude/2.0));
   distCalc2 = cos(latitude1);
   distCalc2*=cos(latitude2);
-  distCalc2*=sin(difLongtitude/2.0);
-  distCalc2*=sin(difLongtitude/2.0);
+  distCalc2*=sin(diflongitude/2.0);
+  distCalc2*=sin(diflongitude/2.0);
   distCalc +=distCalc2;
 
   distCalc=(2*atan2(sqrt(distCalc),sqrt(1.0-distCalc)));
@@ -268,18 +268,18 @@ float getDistance(float latitude1, float longtitude1, float latitude2, float lon
 void initModem() {
   // Resetting the modem
   #if defined(SIM_MODEM_RST)
-      pinMode(SIM_MODEM_RST, SIM_MODEM_RST_LOW ? OUTPUT_OPEN_DRAIN : OUTPUT);
-      digitalWrite(SIM_MODEM_RST, SIM_MODEM_RST_LOW);
-      delay(100);
-      digitalWrite(SIM_MODEM_RST, !SIM_MODEM_RST_LOW);
-      delay(3000);
-      digitalWrite(SIM_MODEM_RST, SIM_MODEM_RST_LOW);
+    SERIAL_MONITOR.println("Resetting modem...");
+    pinMode(SIM_MODEM_RST, SIM_MODEM_RST_LOW ? OUTPUT_OPEN_DRAIN : OUTPUT);
+    digitalWrite(SIM_MODEM_RST, SIM_MODEM_RST_LOW);
+    delay(100);
+    digitalWrite(SIM_MODEM_RST, !SIM_MODEM_RST_LOW);
+    delay(3000);
+    digitalWrite(SIM_MODEM_RST, SIM_MODEM_RST_LOW);
+    SERIAL_MONITOR.println("Waiting for resetting modem...");
+    delay(3000);  
   #endif
 
-  DBG("Wait...");
-  delay(3000);
-
-  DBG("Initializing modem...");
+  SERIAL_MONITOR.println("Initializing modem...");
   while (!modem.init()) {
       SERIAL_MONITOR.println("Modem init failed! Retrying...");
       delay(2000);
@@ -292,18 +292,20 @@ void initModem() {
     * 14 WCDMA Only
     * 38 LTE Only
     */
+  SERIAL_MONITOR.println("Setting Network Mode...");
   modem.setNetworkMode(2);
   if (modem.waitResponse(10000L) != 1) {
-      DBG(" setNetworkMode faill");
+    SERIAL_MONITOR.println("Set Net workMode faill");
   }
+  SERIAL_MONITOR.println("Setting Network Mode successfully");
 
   String name = modem.getModemName();
-  DBG("Modem Name:", name);
+  SERIAL_MONITOR.print("Modem Name: "); SERIAL_MONITOR.println(name);
 
   String modemInfo = modem.getModemInfo();
-  DBG("Modem Info:", modemInfo);
+  SERIAL_MONITOR.print("Modem Info: "); SERIAL_MONITOR.println(modemInfo);
 
-  SERIAL_MONITOR.print("Waiting for network...");
+  SERIAL_MONITOR.println("Waiting for network...");
   while (!modem.waitForNetwork()) {
       SERIAL_MONITOR.println("Get network failed! Retrying...");
       delay(2000);
@@ -401,14 +403,20 @@ void callPhoneNumber() {
 
 void getLbs()
 {
+  SERIAL_MONITOR.println();
+  SERIAL_MONITOR.println("------------------ LBS Data ------------------");
   if (modem.getGsmLocation(&latitude, &longitude, &accuracy, &year, &month, &day, &hour, &minute, &second)) 
   {
     SERIAL_MONITOR.println("LBS OK:");
-    SERIAL_MONITOR.print("Latitude: "); SERIAL_MONITOR.println(latitude, 8);
-    SERIAL_MONITOR.print("Longitude: "); SERIAL_MONITOR.println(longitude, 8);
-    SERIAL_MONITOR.print("Accuracy: "); SERIAL_MONITOR.println(accuracy);
-    SERIAL_MONITOR.println("Year: " + String(year) + "\tMonth: " + String(month) + "\tDay: " + String(day));
-    SERIAL_MONITOR.println("Hour: " + String(hour) + "\tMinute: " + String(minute) + "\tSecond: " + String(second));
+    SERIAL_MONITOR.print("latitude: "); SERIAL_MONITOR.print(latitude, 8);
+    SERIAL_MONITOR.print("\tlongitude: "); SERIAL_MONITOR.println(longitude, 8);
+    // SERIAL_MONITOR.print("Latitude: "); SERIAL_MONITOR.println(latitude, 8);
+    // SERIAL_MONITOR.print("Longitude: "); SERIAL_MONITOR.println(longitude, 8);
+    SERIAL_MONITOR.print("accuracy: "); SERIAL_MONITOR.println(accuracy);
+
+    timestamp = String(year) + "-" + String(month) + "-" + String(day) + " " +
+                String(hour) + ":" + String(minute) + ":" + String(second);
+    SERIAL_MONITOR.print("timestamp: "); SERIAL_MONITOR.println(timestamp);
   } else {
     SERIAL_MONITOR.println("Couldn't get GSM location");
   }
