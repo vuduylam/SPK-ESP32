@@ -58,8 +58,8 @@ void auth_debug_print(AsyncResult &aResult);
 void initModem();
 
 //GSM
-void sendSms(const char* message);
-void callPhoneNumber();
+void sendSms(String message);
+void callPhoneNumber(String phoneNumber);
 
 //
 bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled);
@@ -84,13 +84,16 @@ AsyncResult streamResult;
 
 //================Global Variable================
 String deviceId = "02:AF:35:8C:12:D4";
-String phoneNumber = "";
+String phoneNumber = "+84886882367";
 
 bool antiTheftEnabled = true;
-bool thiefDetected = false;
+bool thiefDetected = true;
 
 bool crashDetected = false;
-unsigned long ms = 0;
+
+unsigned long lastGpsMs = 0;
+unsigned long lastSmsAlertMs = 0;
+unsigned long lastFirebaseMs = 0;
 
 float pinnedLatitude, pinnedLongitude, warningDistance = 100;
 float latitude, longitude, accuracy;
@@ -138,13 +141,22 @@ void loop() {
   // To maintain the authentication and async tasks
   app.loop();
 
-  if(millis() - ms > 5000) {
+  if(millis() - lastGpsMs > 5000) {
+    lastGpsMs = millis();
     getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
 
-    thiefDetected = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
+    //thiefDetected = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
 
     if (thiefDetected) {
       SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Thief detected");
+
+      if(millis() - lastSmsAlertMs > 20000) {
+        lastSmsAlertMs = millis();
+        String message = "Thief WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+        sendSms(message);
+      }
+
+      //callPhoneNumber(phoneNumber);
       turnOnBuzz();
     }
     else {
@@ -153,8 +165,8 @@ void loop() {
   }
 
   //update data to firebase
-  if(millis() - ms > 20000) {
-    ms = millis();
+  if(millis() - lastFirebaseMs > 20000) {
+    lastFirebaseMs = millis();
     SERIAL_MONITOR.println();
     SERIAL_MONITOR.println("=================================================================================");
 
@@ -413,14 +425,14 @@ void processData(AsyncResult &aResult) {
   }
 }
 
-void sendSms(const char* message) {
-  bool resSMS = modem.sendSMS(phoneNumber.c_str(), message);
+void sendSms(String message) {
+  bool resSMS = modem.sendSMS(phoneNumber, message);
   SERIAL_MONITOR.print("SMS: ");
   SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
 }
 
 void callPhoneNumber() {
-  bool resCall = modem.callNumber(phoneNumber.c_str());
+  bool resCall = modem.callNumber(phoneNumber);
   SERIAL_MONITOR.print("Call:");
   if(resCall){
     SERIAL_MONITOR.println("Ok");
