@@ -130,51 +130,16 @@ void loop() {
   app.loop();
 
   if(millis() - ms > 5000) {
-    //getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
+    getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
 
-    pinnedLatitude = 10.762622; pinnedLongitude = 106.660172;
+    thiefDetected = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
 
-    float warningDistanceTest = 50;
-
-    float latitudeTest1 = 10.762622; float longitudeTest1 = 106.660172; //0m
-    float latitudeTest2 = 10.762712; float longitudeTest2 = 106.660172; //10m
-    float latitudeTest3 = 10.762800; float longitudeTest3 = 106.660172; //100m
-
-    SERIAL_MONITOR.println("------- Testcase 1 -------");
-    bool testcase1 = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistanceTest, latitudeTest1, longitudeTest1, antiTheftEnabled);
-    if (testcase1) {
-      SERIAL_MONITOR.println("Testcase 1: Detected");
+    if (thiefDetected) {
+      SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Thief detected");
     }
     else {
-      SERIAL_MONITOR.println("Testcase 1: Not detected");
+      SERIAL_MONITOR.print(timestamp + ": ");SERIAL_MONITOR.println("Thief not detected");
     }
-
-    SERIAL_MONITOR.println("------- Testcase 2 -------");
-    bool testcase2 = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistanceTest, latitudeTest2, longitudeTest2, antiTheftEnabled);
-    if (testcase2) {
-      SERIAL_MONITOR.println("Testcase 2: Detected");
-    }
-    else {
-      SERIAL_MONITOR.println("Testcase 2: Not detected");
-    }
-
-    SERIAL_MONITOR.println("------- Testcase 3 -------");
-    bool testcase3 = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistanceTest, latitudeTest3, longitudeTest3, antiTheftEnabled);
-    if (testcase3) {
-      SERIAL_MONITOR.println("Testcase 3: Detected");
-    }
-    else {
-      SERIAL_MONITOR.println("Testcase 3: Not detected");
-    }
-
-    // thiefDetected = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
-
-    // if (thiefDetected) {
-    //   SERIAL_MONITOR.println("Detected");
-    // }
-    // else {
-    //   SERIAL_MONITOR.println("Not detected");
-    // }
   }
 
   //update data to firebase
