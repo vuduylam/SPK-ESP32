@@ -11,6 +11,9 @@
 #include <TinyGsmClient.h>
 
 //================GPS================
+#define BUZZ_PIN 20
+
+//================GPS================
 #define GPS_RX_PIN 34
 #define GPS_TX_PIN 35
 #define GPS_BAUD 9600
@@ -61,6 +64,9 @@ void callPhoneNumber();
 //
 bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled);
 
+//Buzz
+void turnOnBuzz();
+
 //================ ================
 TinyGPSPlus gps;
 
@@ -98,6 +104,9 @@ void setup() {
   SERIAL_MONITOR.begin(115200);
   SERIAL_GPS.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   SERIAL_AT.begin(SIM_MODEM_BAUD, SERIAL_8N1, SIM_MODEM_RX, SIM_MODEM_TX);
+  
+  pinMode(BUZZ_PIN, OUTPUT);
+  digitalWrite(BUZZ_PIN, LOW);
 
   initModem();
 
@@ -136,9 +145,10 @@ void loop() {
 
     if (thiefDetected) {
       SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Thief detected");
+      turnOnBuzz();
     }
     else {
-      SERIAL_MONITOR.print(timestamp + ": ");SERIAL_MONITOR.println("Thief not detected");
+      SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Thief not detected");
     }
   }
 
@@ -441,7 +451,7 @@ void getLbs()
   }
 }
 
-bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled){
+bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled) {
   if (!antiTheftEnabled) {
     return false;
   }
@@ -452,4 +462,8 @@ bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDi
   SERIAL_MONITOR.print("distance: "); SERIAL_MONITOR.println(distance, 8);
 
   return (distance > warningDistance);
+}
+
+void turnOnBuzz() {
+  digitalWrite(BUZZ_PIN, HIGH);
 }
