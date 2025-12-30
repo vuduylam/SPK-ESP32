@@ -58,6 +58,9 @@ void initModem();
 void sendSms(const char* message);
 void callPhoneNumber();
 
+//
+bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled);
+
 //================ ================
 TinyGPSPlus gps;
 
@@ -76,10 +79,14 @@ AsyncResult streamResult;
 //================Global Variable================
 String deviceId = "02:AF:35:8C:12:D4";
 String phoneNumber = "";
-bool antiTheftEnabled = false;
+
+bool antiTheftEnabled = true;
+bool thiefDetected = false;
+
 bool crashDetected = false;
 unsigned long ms = 0;
 
+float pinnedLatitude, pinnedLongitude, warningDistance = 100;
 float latitude, longitude, accuracy;
 int year, month, day;
 int hour, minute, second;
@@ -116,18 +123,65 @@ void setup() {
   streamClient.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
 
   Database.get(streamClient, "/Data", processData, true, "streamTask");
-  //Database.get(streamClient, "/examples/Stream/data", processData, true, "streamTask");
 }
 
 void loop() {
   // To maintain the authentication and async tasks
   app.loop();
+
+  if(millis() - ms > 5000) {
+    //getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
+
+    pinnedLatitude = 10.762622; pinnedLongitude = 106.660172;
+
+    float warningDistanceTest = 50;
+
+    float latitudeTest1 = 10.762622; float longitudeTest1 = 106.660172; //0m
+    float latitudeTest2 = 10.762712; float longitudeTest2 = 106.660172; //10m
+    float latitudeTest3 = 10.762800; float longitudeTest3 = 106.660172; //100m
+
+    SERIAL_MONITOR.println("------- Testcase 1 -------");
+    bool testcase1 = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistanceTest, latitudeTest1, longitudeTest1, antiTheftEnabled);
+    if (testcase1) {
+      SERIAL_MONITOR.println("Testcase 1: Detected");
+    }
+    else {
+      SERIAL_MONITOR.println("Testcase 1: Not detected");
+    }
+
+    SERIAL_MONITOR.println("------- Testcase 2 -------");
+    bool testcase2 = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistanceTest, latitudeTest2, longitudeTest2, antiTheftEnabled);
+    if (testcase2) {
+      SERIAL_MONITOR.println("Testcase 2: Detected");
+    }
+    else {
+      SERIAL_MONITOR.println("Testcase 2: Not detected");
+    }
+
+    SERIAL_MONITOR.println("------- Testcase 3 -------");
+    bool testcase3 = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistanceTest, latitudeTest3, longitudeTest3, antiTheftEnabled);
+    if (testcase3) {
+      SERIAL_MONITOR.println("Testcase 3: Detected");
+    }
+    else {
+      SERIAL_MONITOR.println("Testcase 3: Not detected");
+    }
+
+    // thiefDetected = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
+
+    // if (thiefDetected) {
+    //   SERIAL_MONITOR.println("Detected");
+    // }
+    // else {
+    //   SERIAL_MONITOR.println("Not detected");
+    // }
+  }
+
+  //update data to firebase
   if(millis() - ms > 20000) {
     ms = millis();
     SERIAL_MONITOR.println();
     SERIAL_MONITOR.println("=================================================================================");
-
-    getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
 
     if (app.ready()) {
       SERIAL_MONITOR.println("----------- Get data from Firebase -----------");
@@ -242,20 +296,20 @@ float getDistance(float latitude1, float longitude1, float latitude2, float long
   // Variables
   float distCalc=0;
   float distCalc2=0;
-  float difLatiude=0;
-  float diflongitude=0;
+  float deltaLat=0;
+  float deltaLon=0;
 
   // Calculations
-  difLatiude  = radians(latitude2-latitude1);
+  deltaLat  = radians(latitude2-latitude1);
   latitude1 = radians(latitude1);
   latitude2 = radians(latitude2);
-  diflongitude = radians((longitude2)-(longitude1));
+  deltaLon = radians((longitude2)-(longitude1));
 
-  distCalc = (sin(difLatiude/2.0)*sin(difLatiude/2.0));
+  distCalc = (sin(deltaLat/2.0)*sin(deltaLat/2.0));
   distCalc2 = cos(latitude1);
   distCalc2*=cos(latitude2);
-  distCalc2*=sin(diflongitude/2.0);
-  distCalc2*=sin(diflongitude/2.0);
+  distCalc2*=sin(deltaLon/2.0);
+  distCalc2*=sin(deltaLon/2.0);
   distCalc +=distCalc2;
 
   distCalc=(2*atan2(sqrt(distCalc),sqrt(1.0-distCalc)));
@@ -420,4 +474,17 @@ void getLbs()
   } else {
     SERIAL_MONITOR.println("Couldn't get GSM location");
   }
+}
+
+bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled){
+  if (!antiTheftEnabled) {
+    return false;
+  }
+
+  float distance = getDistance(pinnedLatitude, pinnedLongitude, latitude, longitude);
+
+  SERIAL_MONITOR.print("warning distance: "); SERIAL_MONITOR.println(warningDistance, 8);
+  SERIAL_MONITOR.print("distance: "); SERIAL_MONITOR.println(distance, 8);
+
+  return (distance > warningDistance);
 }
