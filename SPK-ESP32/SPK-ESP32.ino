@@ -41,10 +41,10 @@ const char gprsUser[] = "";
 const char gprsPass[] = "";
 
 //==============Firebase===============
-#define API_KEY "AIzaSyBuLticw5nMQeC2KftZkPhg2k5bJfa8K48"
+#define API_KEY "AIzaSyCA-PfcPMBwfto-V_RSADy4Q7WEzdab5kg"
 #define USER_EMAIL "vuduylam250302@gmail.com"
-#define USER_PASSWORD "123456"
-#define DATABASE_URL "https://test-a2978-default-rtdb.asia-southeast1.firebasedatabase.app/"
+#define USER_PASSWORD "M@tkhau1234"
+#define DATABASE_URL "https://spk-ce-2025-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
 //================Function declaration================
 //GPS
@@ -62,7 +62,7 @@ void sendSms(String message);
 void callPhoneNumber(String phoneNumber);
 
 //
-bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled);
+bool theftDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled);
 
 //Buzz
 void turnOnBuzz();
@@ -87,7 +87,7 @@ String deviceId = "02:AF:35:8C:12:D4";
 String phoneNumber = "+84886882367";
 
 bool antiTheftEnabled = true;
-bool thiefDetected = true;
+bool theftDetected = false;
 
 bool crashDetected = false;
 
@@ -134,7 +134,9 @@ void setup() {
 
   streamClient.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
 
-  Database.get(streamClient, "/Data", processData, true, "streamTask");
+  String firebasePath = "/devices" + deviceId;
+
+  Database.get(streamClient, firebasePath, processData, true, "streamTask");
 }
 
 void loop() {
@@ -145,16 +147,16 @@ void loop() {
     lastGpsMs = millis();
     getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
 
-    thiefDetected = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
+    theftDetected = theftDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
 
-    if (thiefDetected) {
-      SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Thief detected");
+    if (theftDetected) {
+      SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Theft detected");
 
-      String message = "Thief WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+      String message = "Theft WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
 
       // if(millis() - lastSmsAlertMs > 120000) {
       //   lastSmsAlertMs = millis();
-      //   String message = "Thief WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+      //   String message = "Theft WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
       //   sendSms(message);
       // }
 
@@ -162,7 +164,7 @@ void loop() {
       turnOnBuzz();
     }
     else {
-      SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Thief not detected");
+      SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Theft not detected");
     }
   }
 
@@ -176,24 +178,25 @@ void loop() {
       SERIAL_MONITOR.println("----------- Get data from Firebase -----------");
       getFirebaseData();
       JsonWriter writer;
-      object_t json, locObj, crashObj, idObj, phoneObj, timeObj;
+      object_t json, locObj, crashObj, idObj, theftObj, timeObj;
 
       object_t lat, lon;
       writer.create(lat, "latitude", String(latitude, 8));
       writer.create(lon, "longitude", String(longitude, 8));
       writer.join(locObj, 2, lat, lon);
-
-      writer.create(crashObj, "crashDetected", crashDetected);
-      writer.create(idObj, "deviceId", deviceId);
-      writer.create(phoneObj, "phoneNumber", phoneNumber);
-      writer.create(timeObj, "timestamp", timestamp);
-
+      
       object_t locWrapper;
       writer.create(locWrapper, "location", locObj);
 
-      writer.join(json, 5, crashObj, idObj, locWrapper, phoneObj, timeObj);
+      writer.create(crashObj, "crashDetected", crashDetected);
+      writer.create(theftObj, "theftDetected", theftDetected);
+      writer.create(idObj, "deviceId", deviceId);
+      writer.create(timeObj, "timestamp", timestamp);
 
-      Database.set<object_t>(aClient, "/Data", json, processData, "setTask");
+      writer.join(json, 5, crashObj, idObj, locWrapper, theftObj, timeObj);
+
+      String firebaseDataPath = "/devices/" + deviceId + "/data";
+      Database.set<object_t>(aClient, firebaseDataPath, json, processData, "setTask");
     }
 
     SERIAL_MONITOR.println("=================================================================================");
@@ -213,17 +216,24 @@ void check_and_print_value(T value) {
 }
 
 void getFirebaseData() {
-    phoneNumber = Database.get<String>(aClient, "/examples/test");
-    SERIAL_MONITOR.print("Get phone number status: ");
-    check_and_print_value(phoneNumber);
-    antiTheftEnabled = Database.get<bool>(aClient, "/examples/antiTheftEnabled");
-    SERIAL_MONITOR.print("Get antiTheftEnabled flag status: ");
-    if (antiTheftEnabled){
-      SERIAL_MONITOR.println("On");
-    }
-    else {
-      SERIAL_MONITOR.println("Off");
-    }
+  String firebaseConfigPath = "/devices" + deviceId + "/config";
+
+  phoneNumber = Database.get<String>(aClient, "/devices/02:AF:35:8C:12:D4/config/phoneNumber");
+  SERIAL_MONITOR.print("Get phone number status: "); check_and_print_value(phoneNumber);
+
+  SERIAL_MONITOR.println("Get Anti-theft configuration: ");
+
+  pinnedLatitude = Database.get<float>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/pinnedLat");
+  SERIAL_MONITOR.print("\tPinned lat: "); check_and_print_value(pinnedLatitude);
+
+  pinnedLongitude = Database.get<float>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/pinnedLng");
+  SERIAL_MONITOR.print("\tPinned lng: "); check_and_print_value(pinnedLongitude);
+
+  warningDistance = Database.get<float>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/radius");
+  SERIAL_MONITOR.print("\tRadius: "); check_and_print_value(warningDistance);
+
+  antiTheftEnabled = Database.get<bool>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/antiTheftEnabled");
+  SERIAL_MONITOR.print("\tGet antiTheftEnabled flag status: "); SERIAL_MONITOR.println(antiTheftEnabled ? "On" : "Off");
 }
 
 void getGps(float& latitude, float& longitude, float& accuracy,
@@ -465,7 +475,7 @@ void getLbs()
   }
 }
 
-bool thiefDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled) {
+bool theftDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled) {
   if (!antiTheftEnabled) {
     return false;
   }
