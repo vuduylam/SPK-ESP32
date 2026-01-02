@@ -9,13 +9,22 @@
 #include <FirebaseClient.h>
 #include <TinyGPSPlus.h>
 #include <TinyGsmClient.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <math.h>
+#include <Wire.h>
 
-//================GPS================
+//===============BUZZ================
 #define BUZZ_PIN 20
+#define BUZZ_TIME 30000 //ms
 
-//================GPS================
-#define GPS_RX_PIN 34
-#define GPS_TX_PIN 35
+//============== MPU6050 ==============
+#define ACCIDENT_TIME_THRESHOLD 1000
+#define ACCIDENT_MAGNITUDE_THRESHOLD 90
+
+//================ GPS ================
+#define GPS_TX_PIN 1
+#define GPS_RX_PIN 3
 #define GPS_BAUD 9600
 
 //==============Modem===============
@@ -23,8 +32,8 @@
 #define SIM_MODEM_RST 5
 #define SIM_MODEM_RST_LOW true // active LOW
 #define SIM_MODEM_RST_DELAY 200
-#define SIM_MODEM_TX 26
-#define SIM_MODEM_RX 27
+#define SIM_MODEM_TX 17
+#define SIM_MODEM_RX 16
 
 //==============Serial===============
 #define SERIAL_MONITOR Serial
@@ -59,16 +68,18 @@ void initModem();
 
 //GSM
 void sendSms(String message);
-void callPhoneNumber(String phoneNumber);
+void callPhoneNumber();
 
-//
+//Algorithm
 bool theftDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled);
+void crashDetection();
 
 //Buzz
 void turnOnBuzz();
 
 //================ ================
 TinyGPSPlus gps;
+Adafruit_MPU6050 mpu;
 
 TinyGsm modem(SERIAL_AT);
 TinyGsmClient gsm_client(modem, 0), stream_gsm_client(modem, 1);
@@ -86,14 +97,26 @@ AsyncResult streamResult;
 String deviceId = "02:AF:35:8C:12:D4";
 String phoneNumber = "+84886882367";
 
-bool antiTheftEnabled = true;
+bool antiTheftEnabled = false;
 bool theftDetected = false;
-
 bool crashDetected = false;
+bool crashDetectedFlag = false;
+
+float accelX = 0, accelY = 0, accelZ = 0;
+float deltaX = 0, deltaY = 0, deltaZ = 0;
+int vibration = 0, devibrate = 75;
+float magnitude = 0;
 
 unsigned long lastGpsMs = 0;
 unsigned long lastSmsAlertMs = 0;
 unsigned long lastFirebaseMs = 0;
+
+unsigned long lastMpuMs = 0;
+unsigned long accidentTimeMs = 0;
+unsigned long impactStartMs = 0;
+bool impactOngoing = false;
+
+unsigned long lastBuzzMs = 0;
 
 float pinnedLatitude, pinnedLongitude, warningDistance = 100;
 float latitude, longitude, accuracy;
@@ -107,6 +130,18 @@ void setup() {
   SERIAL_MONITOR.begin(115200);
   SERIAL_GPS.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   SERIAL_AT.begin(SIM_MODEM_BAUD, SERIAL_8N1, SIM_MODEM_RX, SIM_MODEM_TX);
+
+  if (!mpu.begin()) {
+    Serial.println("Failed to find MPU6050 chip");
+    while (1) {
+      delay(10);
+    }
+  }
+  Serial.println("MPU6050 Found!");
+
+  mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
   
   pinMode(BUZZ_PIN, OUTPUT);
   digitalWrite(BUZZ_PIN, LOW);
@@ -134,7 +169,7 @@ void setup() {
 
   streamClient.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
 
-  String firebasePath = "/devices" + deviceId;
+  String firebasePath = "/devices/" + deviceId;
 
   Database.get(streamClient, firebasePath, processData, true, "streamTask");
 }
@@ -142,6 +177,31 @@ void setup() {
 void loop() {
   // To maintain the authentication and async tasks
   app.loop();
+  
+  //Turn off buzz after 30s
+  if (millis() - lastBuzzMs >= BUZZ_TIME) {
+    digitalWrite(BUZZ_PIN, LOW);
+  }
+
+  if (millis() - lastMpuMs > 500) {
+    SERIAL_MONITOR.println();
+    SERIAL_MONITOR.println("------------- Accident detection -------------");
+    lastMpuMs = millis();
+    crashDetection();
+
+    if (crashDetectedFlag) {
+      accidentTimeMs = millis();
+
+      crashDetected = true;
+      crashDetectedFlag = false;
+      
+      String accident_message = "Accident WARNING! Location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+      sendSms(accident_message);
+      turnOnBuzz();
+      callPhoneNumber();
+    }
+  }
+
 
   if(millis() - lastGpsMs > 5000) {
     lastGpsMs = millis();
@@ -149,18 +209,13 @@ void loop() {
 
     theftDetected = theftDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
 
-    if (theftDetected) {
+    if (theftDetected && antiTheftEnabled) {
       SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Theft detected");
 
       String message = "Theft WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+      sendSms(message);
 
-      // if(millis() - lastSmsAlertMs > 120000) {
-      //   lastSmsAlertMs = millis();
-      //   String message = "Theft WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
-      //   sendSms(message);
-      // }
-
-      //callPhoneNumber(phoneNumber);
+      //callPhoneNumber();
       turnOnBuzz();
     }
     else {
@@ -172,7 +227,6 @@ void loop() {
   if(millis() - lastFirebaseMs > 20000) {
     lastFirebaseMs = millis();
     SERIAL_MONITOR.println();
-    SERIAL_MONITOR.println("=================================================================================");
 
     if (app.ready()) {
       SERIAL_MONITOR.println("----------- Get data from Firebase -----------");
@@ -196,10 +250,10 @@ void loop() {
       writer.join(json, 5, crashObj, idObj, locWrapper, theftObj, timeObj);
 
       String firebaseDataPath = "/devices/" + deviceId + "/data";
+
+      SERIAL_MONITOR.println("------------ Write data to Firebase ------------");
       Database.set<object_t>(aClient, firebaseDataPath, json, processData, "setTask");
     }
-
-    SERIAL_MONITOR.println("=================================================================================");
   }
 }
 
@@ -234,6 +288,9 @@ void getFirebaseData() {
 
   antiTheftEnabled = Database.get<bool>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/antiTheftEnabled");
   SERIAL_MONITOR.print("\tGet antiTheftEnabled flag status: "); SERIAL_MONITOR.println(antiTheftEnabled ? "On" : "Off");
+
+  crashDetected = Database.get<bool>(aClient, "/devices/02:AF:35:8C:12:D4/data/crashDetected");
+  SERIAL_MONITOR.print("\tUpdate crashDetected status: "); SERIAL_MONITOR.println(crashDetected ? "True" : "False");
 }
 
 void getGps(float& latitude, float& longitude, float& accuracy,
@@ -252,7 +309,7 @@ void getGps(float& latitude, float& longitude, float& accuracy,
   }
 
   SERIAL_MONITOR.println();
-  SERIAL_MONITOR.println("------------------- GPS Data -------------------");
+  SERIAL_MONITOR.println("------------------ GPS Data ------------------");
 
   if (newData) {
     latitude = gps.location.lat();
@@ -438,9 +495,17 @@ void processData(AsyncResult &aResult) {
 }
 
 void sendSms(String message) {
-  bool resSMS = modem.sendSMS(phoneNumber, message);
-  SERIAL_MONITOR.print("SMS: ");
-  SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
+  // lastSmsAlertMs = millis();
+  // bool resSMS = modem.sendSMS(phoneNumber, message);
+  // SERIAL_MONITOR.print("SMS: ");
+  // SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
+
+  if (millis() - lastSmsAlertMs > 300000) {
+    lastSmsAlertMs = millis();
+    bool resSMS = modem.sendSMS(phoneNumber, message);
+    SERIAL_MONITOR.print("SMS: ");
+    SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
+  }
 }
 
 void callPhoneNumber() {
@@ -490,4 +555,50 @@ bool theftDetection(float pinnedLatitude, float pinnedLongitude, float warningDi
 
 void turnOnBuzz() {
   digitalWrite(BUZZ_PIN, HIGH);
+  lastBuzzMs = millis();
+}
+
+void crashDetection() {
+  float oldX = accelX;
+  float oldY = accelY;
+  float oldZ = accelZ;
+  
+  vibration--;
+  if(vibration < 0) vibration = 0;
+
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+  accelX = a.acceleration.x;
+  accelY = a.acceleration.y;
+  accelZ = a.acceleration.z;
+  
+  if(vibration > 0) return;
+
+  deltaX = accelX - oldX;                                           
+  deltaY = accelY - oldY;
+  deltaZ = accelZ - oldZ;
+  
+  //Magnitude to calculate force of impact.
+  magnitude = sqrt(sq(deltaX) + sq(deltaY) + sq(deltaZ));
+  
+  if (magnitude >= ACCIDENT_MAGNITUDE_THRESHOLD) {
+    if (!impactOngoing) {
+      impactOngoing = true;
+      impactStartMs = millis();   // ghi nhận thời điểm đầu tiên
+      SERIAL_MONITOR.print("Warning! Magnitude value: "); SERIAL_MONITOR.println(magnitude);
+    }
+    else {
+      if (millis() - impactStartMs >= ACCIDENT_TIME_THRESHOLD) {
+        crashDetectedFlag = true;
+        impactOngoing = false;   // khóa lại để tránh trigger liên tục
+        SERIAL_MONITOR.print("Accident Magnitude value: "); SERIAL_MONITOR.println(magnitude);
+      }
+    }
+  }
+  else {
+    // Rơi xuống dưới ngưỡng → reset
+    impactOngoing = false;
+    impactStartMs = 0;
+    SERIAL_MONITOR.print("No accident! Magnitude value: "); SERIAL_MONITOR.println(magnitude);
+  }
 }
