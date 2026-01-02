@@ -145,16 +145,18 @@ void loop() {
     lastGpsMs = millis();
     getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
 
-    //thiefDetected = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
+    thiefDetected = thiefDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
 
     if (thiefDetected) {
       SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Thief detected");
 
-      if(millis() - lastSmsAlertMs > 20000) {
-        lastSmsAlertMs = millis();
-        String message = "Thief WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
-        sendSms(message);
-      }
+      String message = "Thief WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+
+      // if(millis() - lastSmsAlertMs > 120000) {
+      //   lastSmsAlertMs = millis();
+      //   String message = "Thief WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+      //   sendSms(message);
+      // }
 
       //callPhoneNumber(phoneNumber);
       turnOnBuzz();
