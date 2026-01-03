@@ -99,6 +99,7 @@ String phoneNumber = "+84886882367";
 
 bool antiTheftEnabled = false;
 bool theftDetected = false;
+bool theftAlertSent = false;
 bool crashDetected = false;
 bool crashDetectedFlag = false;
 
@@ -212,13 +213,16 @@ void loop() {
     if (theftDetected && antiTheftEnabled) {
       SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Theft detected");
 
-      String message = "Theft WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
-      sendSms(message);
-
-      //callPhoneNumber();
-      turnOnBuzz();
+      if (!theftAlertSent) {
+        String message = "Theft WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+        sendSms(message);
+        
+        theftAlertSent = true; // Đánh dấu đã gửi
+        turnOnBuzz();
+      }
     }
     else {
+      theftAlertSent = false;
       SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Theft not detected");
     }
   }
@@ -495,17 +499,16 @@ void processData(AsyncResult &aResult) {
 }
 
 void sendSms(String message) {
-  // lastSmsAlertMs = millis();
-  // bool resSMS = modem.sendSMS(phoneNumber, message);
-  // SERIAL_MONITOR.print("SMS: ");
-  // SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
+  bool resSMS = modem.sendSMS(phoneNumber, message);
+  SERIAL_MONITOR.print("SMS: ");
+  SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
 
-  if (millis() - lastSmsAlertMs > 300000) {
-    lastSmsAlertMs = millis();
-    bool resSMS = modem.sendSMS(phoneNumber, message);
-    SERIAL_MONITOR.print("SMS: ");
-    SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
-  }
+  // if (millis() - lastSmsAlertMs > 300000) {
+  //   lastSmsAlertMs = millis();
+  //   bool resSMS = modem.sendSMS(phoneNumber, message);
+  //   SERIAL_MONITOR.print("SMS: ");
+  //   SERIAL_MONITOR.println(resSMS ? "Ok" : "Failed");
+  // }
 }
 
 void callPhoneNumber() {
