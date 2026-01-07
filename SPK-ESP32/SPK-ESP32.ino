@@ -15,7 +15,7 @@
 #include <Wire.h>
 
 //===============BUZZ================
-#define BUZZ_PIN 20
+#define BUZZ_PIN 5
 #define BUZZ_TIME 30000 //ms
 
 //============== MPU6050 ==============
@@ -217,7 +217,7 @@ void loop() {
         String message = "Theft WARNING! Last location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
         sendSms(message);
         
-        theftAlertSent = true; // Đánh dấu đã gửi
+        theftAlertSent = true; 
         turnOnBuzz();
       }
     }
