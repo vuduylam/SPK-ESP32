@@ -29,7 +29,7 @@
 
 //==============Modem===============
 #define SIM_MODEM_BAUD 115200
-#define SIM_MODEM_RST 5
+#define SIM_MODEM_RST 15
 #define SIM_MODEM_RST_LOW true // active LOW
 #define SIM_MODEM_RST_DELAY 200
 #define SIM_MODEM_TX 17
@@ -71,7 +71,7 @@ void sendSms(String message);
 void callPhoneNumber();
 
 //Algorithm
-bool theftDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled);
+bool theftDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnable);
 void crashDetection();
 
 //Buzz
@@ -97,11 +97,12 @@ AsyncResult streamResult;
 String deviceId = "02:AF:35:8C:12:D4";
 String phoneNumber = "+84886882367";
 
-bool antiTheftEnabled = false;
+bool antiTheftEnable = false;
 bool theftDetected = false;
 bool theftAlertSent = false;
 bool crashDetected = false;
 bool crashDetectedFlag = false;
+bool crashAlertSent = false;
 
 float accelX = 0, accelY = 0, accelZ = 0;
 float deltaX = 0, deltaY = 0, deltaZ = 0;
@@ -184,33 +185,13 @@ void loop() {
     digitalWrite(BUZZ_PIN, LOW);
   }
 
-  if (millis() - lastMpuMs > 500) {
-    SERIAL_MONITOR.println();
-    SERIAL_MONITOR.println("------------- Accident detection -------------");
-    lastMpuMs = millis();
-    crashDetection();
-
-    if (crashDetectedFlag) {
-      accidentTimeMs = millis();
-
-      crashDetected = true;
-      crashDetectedFlag = false;
-      
-      String accident_message = "Accident WARNING! Location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
-      sendSms(accident_message);
-      turnOnBuzz();
-      callPhoneNumber();
-    }
-  }
-
-
   if(millis() - lastGpsMs > 5000) {
     lastGpsMs = millis();
     getGps(latitude, longitude, accuracy, year, month, day, hour, minute, second);
 
-    theftDetected = theftDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnabled);
+    theftDetected = theftDetection(pinnedLatitude, pinnedLongitude, warningDistance, latitude, longitude, antiTheftEnable);
 
-    if (theftDetected && antiTheftEnabled) {
+    if (theftDetected && antiTheftEnable) {
       SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Theft detected");
 
       if (!theftAlertSent) {
@@ -224,6 +205,28 @@ void loop() {
     else {
       theftAlertSent = false;
       SERIAL_MONITOR.print(timestamp + ": "); SERIAL_MONITOR.println("Theft not detected");
+    }
+  }
+
+  if (millis() - lastMpuMs > 500) {
+    SERIAL_MONITOR.println();
+    SERIAL_MONITOR.println("------------- Accident detection -------------");
+    lastMpuMs = millis();
+    crashDetection();
+
+    if (crashDetectedFlag) {
+      accidentTimeMs = millis();
+
+      crashDetected = true;
+      crashDetectedFlag = false;
+    }
+
+    if(crashDetected && !crashAlertSent){
+      crashAlertSent = true;
+      String accident_message = "Accident WARNING! Location: https://maps.google.com/?q=" + String(latitude, 8) + "," + String(longitude, 8); 
+      sendSms(accident_message);
+      //turnOnBuzz();
+      callPhoneNumber();
     }
   }
 
@@ -282,16 +285,16 @@ void getFirebaseData() {
   SERIAL_MONITOR.println("Get Anti-theft configuration: ");
 
   pinnedLatitude = Database.get<float>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/pinnedLat");
-  SERIAL_MONITOR.print("\tPinned lat: "); check_and_print_value(pinnedLatitude);
+  SERIAL_MONITOR.print("\tPinned lat: "); Serial.println(pinnedLatitude, 8); //check_and_print_value(pinnedLatitude);
 
   pinnedLongitude = Database.get<float>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/pinnedLng");
-  SERIAL_MONITOR.print("\tPinned lng: "); check_and_print_value(pinnedLongitude);
+  SERIAL_MONITOR.print("\tPinned lng: "); Serial.println(pinnedLongitude, 8); //check_and_print_value(pinnedLongitude);
 
   warningDistance = Database.get<float>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/radius");
   SERIAL_MONITOR.print("\tRadius: "); check_and_print_value(warningDistance);
 
-  antiTheftEnabled = Database.get<bool>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/antiTheftEnabled");
-  SERIAL_MONITOR.print("\tGet antiTheftEnabled flag status: "); SERIAL_MONITOR.println(antiTheftEnabled ? "On" : "Off");
+  antiTheftEnable = Database.get<bool>(aClient, "/devices/02:AF:35:8C:12:D4/config/antiTheftConfig/antiTheftEnable");
+  SERIAL_MONITOR.print("\tGet antiTheftEnable flag status: "); SERIAL_MONITOR.println(antiTheftEnable ? "On" : "Off");
 
   crashDetected = Database.get<bool>(aClient, "/devices/02:AF:35:8C:12:D4/data/crashDetected");
   SERIAL_MONITOR.print("\tUpdate crashDetected status: "); SERIAL_MONITOR.println(crashDetected ? "True" : "False");
@@ -543,8 +546,8 @@ void getLbs()
   }
 }
 
-bool theftDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnabled) {
-  if (!antiTheftEnabled) {
+bool theftDetection(float pinnedLatitude, float pinnedLongitude, float warningDistance, float latitude, float longitude, bool antiTheftEnable) {
+  if (!antiTheftEnable) {
     return false;
   }
 
